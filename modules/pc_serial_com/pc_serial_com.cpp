@@ -17,11 +17,23 @@
 
 //=====[Declaration of private data types]=====================================
 
+//  GRUPO: Agregamos un Cuarto estado en la FSM -> PC_SERIAL_GET_DATA_AND_TIME
 typedef enum{
     PC_SERIAL_COMMANDS,
     PC_SERIAL_GET_CODE,
     PC_SERIAL_SAVE_NEW_CODE,
+    PC_SERIAL_GET_DATA_AND_TIME     //Se agrega un 4to estado en la FSM.
 } pcSerialComMode_t;
+
+//  GRUPO: Definimos un tipo enumerativo para el switch de la función que se llama en el cuarto estado de la FSM.
+typedef enum{
+    YEAR,
+    MONTH,
+    DAY,
+    HOUR,
+    MINUTE,
+    SECOND
+} dataAndTime_t;
 
 //=====[Declaration and initialization of public global objects]===============
 
@@ -39,12 +51,35 @@ static pcSerialComMode_t pcSerialComMode = PC_SERIAL_COMMANDS;
 static bool codeComplete = false;
 static int numberOfCodeChars = 0;
 
+//  GRUPO: Generamos variables para realizar el cuarto estado.
+static bool dataAndTimeComplete = false;
+static dataAndTime_t dataAndTime = YEAR;
+
+static char year[5] = "";
+static char month[3] = "";
+static char day[3] = "";
+static char hour[3] = "";
+static char minute[3] = "";
+static char second[3] = "";
+
+static int numberOfDataAndTime = 0;
+
+//  GRUPO: Generamos variables booleanas para cargar Data and Time
+//static bool readYear = false;
+//static bool readMonth = false;
+//static bool readDay = false;
+//static bool readHour = false;
+//static bool readMinute = false;
+//static bool readSecond = false;
+
 //=====[Declarations (prototypes) of private functions]========================
 
 static void pcSerialComStringRead( char* str, int strLength );
 
 static void pcSerialComGetCodeUpdate( char receivedChar );
 static void pcSerialComSaveNewCodeUpdate( char receivedChar );
+//  GRUPOS: se declara la función que utiliza el 4to estado de la FSM.
+static void pcSerialComGetDateAndTime( char receivedChar );
 
 static void pcSerialComCommandUpdate( char receivedChar );
 
@@ -67,6 +102,7 @@ void pcSerialComInit()
     availableCommands();
 }
 
+
 char pcSerialComCharRead()
 {
     char receivedChar = '\0';
@@ -80,7 +116,7 @@ void pcSerialComStringWrite( const char* str )
 {
     uartUsb.write( str, strlen(str) );
 }
-
+//  GRUPO: Agregamos el 4to estado en la FSM.
 void pcSerialComUpdate()
 {
     char receivedChar = pcSerialComCharRead();
@@ -96,6 +132,10 @@ void pcSerialComUpdate()
 
             case PC_SERIAL_SAVE_NEW_CODE:
                 pcSerialComSaveNewCodeUpdate( receivedChar );
+            break;
+            
+            case PC_SERIAL_GET_DATA_AND_TIME:
+                pcSerialComGetDateAndTime( receivedChar );
             break;
             default:
                 pcSerialComMode = PC_SERIAL_COMMANDS;
@@ -116,15 +156,113 @@ void pcSerialComCodeCompleteWrite( bool state )
 
 //=====[Implementations of private functions]==================================
 
+/*  FUNCIÓN BLOQUEANTE. GRUPO
+*   Para que deje de ser bloqueante, podemos agregar un cuarto estado en la Máquina de Estados Finitos y utilizar readable()
+*   en vez de read(), ya que chequea si tengo o no información para leer. Si no tengo información sigue y no se queda 
+*   bloqueado.
+*   Espera a recibir los 4 caracteres para salir del for, deberíamos buscar la forma para que esto no pase, agregando el estado
+*   nuevo en la Maquina. Para esto, debemos entrar a monitores.
+*/
 static void pcSerialComStringRead( char* str, int strLength )
 {
     int strIndex;
     for ( strIndex = 0; strIndex < strLength; strIndex++) {
         uartUsb.read( &str[strIndex] , 1 );
-        uartUsb.write( &str[strIndex] ,1 );
+        //str[strIndex] = str[strIndex] + 1;    GRUPO
+        uartUsb.write( &str[strIndex] , 1 );
     }
     str[strLength]='\0';
 }
+
+//  GRUPO: Se implementa la función que utiliza el 4to estado de la FSM.
+static void pcSerialComGetDateAndTime( char receivedChar )
+{
+    switch( dataAndTime ) {
+        case YEAR:
+            year[numberOfDataAndTime] = receivedChar;
+            uartUsb.write( &receivedChar, 1 );
+            numberOfDataAndTime++;
+            if ( numberOfDataAndTime >= 4 ) {
+                year[numberOfDataAndTime] = '\0';
+                numberOfDataAndTime = 0;
+                dataAndTime = MONTH;
+                pcSerialComStringWrite("\r\n");
+                pcSerialComStringWrite("Type two digits for the current month (01-12): ");
+            }
+        break;
+
+        case MONTH:
+            month[numberOfDataAndTime] = receivedChar;
+            uartUsb.write( &receivedChar, 1 );
+            numberOfDataAndTime++;
+            if ( numberOfDataAndTime >= 2 ) {
+                month[numberOfDataAndTime] = '\0';
+                numberOfDataAndTime = 0;
+                dataAndTime = DAY;
+                pcSerialComStringWrite("\r\n");
+                pcSerialComStringWrite("Type two digits for the current day (01-31): ");
+            }
+        break;
+
+        case DAY:
+            day[numberOfDataAndTime] = receivedChar;
+            uartUsb.write( &receivedChar, 1 );
+            numberOfDataAndTime++;
+            if ( numberOfDataAndTime >= 2 ) {
+                day[numberOfDataAndTime] = '\0';
+                numberOfDataAndTime = 0;
+                dataAndTime = HOUR;
+                pcSerialComStringWrite("\r\n");
+                pcSerialComStringWrite("Type two digits for the current hour (00-23): ");
+            }
+        break;
+
+        case HOUR:
+            hour[numberOfDataAndTime] = receivedChar;
+            uartUsb.write( &receivedChar, 1 );
+            numberOfDataAndTime++;
+            if ( numberOfDataAndTime >= 2 ) {
+                hour[numberOfDataAndTime] = '\0';
+                numberOfDataAndTime = 0;
+                dataAndTime = MINUTE;
+                pcSerialComStringWrite("\r\n");
+                pcSerialComStringWrite("Type two digits for the current minutes (00-59): ");
+            }
+        break;
+
+        case MINUTE:
+            minute[numberOfDataAndTime] = receivedChar;
+            uartUsb.write( &receivedChar, 1 );
+            numberOfDataAndTime++;
+            if ( numberOfDataAndTime >= 2 ) {
+                minute[numberOfDataAndTime] = '\0';
+                numberOfDataAndTime = 0;
+                dataAndTime = SECOND;
+                pcSerialComStringWrite("\r\n");
+                pcSerialComStringWrite("Type two digits for the current seconds (00-59): ");
+            }
+        break;
+
+        case SECOND:
+            second[numberOfDataAndTime] = receivedChar;
+            uartUsb.write( &receivedChar , 1 );
+            numberOfDataAndTime++;
+            if ( numberOfDataAndTime >= 2 ) {
+                second[numberOfDataAndTime] = '\0';
+                numberOfDataAndTime = 0;
+                dataAndTime = YEAR;
+                dataAndTimeComplete = true;
+                pcSerialComMode = PC_SERIAL_COMMANDS;
+                
+                pcSerialComStringWrite("\r\n");
+                pcSerialComStringWrite("Date and time has been set\r\n");
+                dateAndTimeWrite( atoi(year), atoi(month), atoi(day), atoi(hour), atoi(minute), atoi(second) );
+            } 
+        break;
+        default: break;
+    }
+}
+
 
 static void pcSerialComGetCodeUpdate( char receivedChar )
 {
@@ -251,8 +389,15 @@ static void commandShowCurrentTemperatureInFahrenheit()
     pcSerialComStringWrite( str );  
 }
 
+//  GRUPO: Modificamos la función.
 static void commandSetDateAndTime()
 {
+    pcSerialComMode = PC_SERIAL_GET_DATA_AND_TIME;
+    dataAndTimeComplete = false;
+    numberOfDataAndTime = 0;
+    pcSerialComStringWrite("\r\nType four digits for the current year (YYYY): ");
+    
+    /*
     char year[5] = "";
     char month[3] = "";
     char day[3] = "";
@@ -288,6 +433,7 @@ static void commandSetDateAndTime()
 
     dateAndTimeWrite( atoi(year), atoi(month), atoi(day), 
         atoi(hour), atoi(minute), atoi(second) );
+    */
 }
 
 static void commandShowDateAndTime()

@@ -24,6 +24,7 @@ DigitalIn mq2(PE_12);
 
 void gasSensorInit()
 {
+    mq2.mode(PullDown); //GRUPO: Usamos PullDown ya que simulamos con un Dip-Switch y no con el MQ2.
 }
 
 void gasSensorUpdate()
